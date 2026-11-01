@@ -1,0 +1,21 @@
+# Keycloak (installé hors dépôt, mais au cas où)
+keycloak*/
+*.zip
+
+# Secrets et identifiants
+.env
+*.env
+*.key
+*.pem
+secrets/
+credentials*
+
+# Exports de configuration non relus (peuvent contenir des secrets)
+exports-bruts/
+
+# Système et éditeur
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+*.log
