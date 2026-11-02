@@ -23,7 +23,7 @@ Chaîne d'accès : utilisateur, groupe, rôle, permission, ressource. Par défau
 
 | Jalon | Contenu | État |
 |---|---|---|
-| 1. Socle | Keycloak local, realm, utilisateurs, groupes, rôles | À faire |
+| 1. Socle | Keycloak local, realm, utilisateurs, groupes, rôles | Terminé |
 | 2. Autorisation | Deux applications de test, matrice des 4 cas, erreurs 403 | À faire |
 | 3. Sécurisation | MFA, politique de mot de passe, durée des sessions | À faire |
 | 4. Journaux et détection | Événements envoyés à Wazuh ou Splunk, 2 ou 3 alertes | À faire |
