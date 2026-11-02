@@ -4,6 +4,18 @@ Authentification, autorisation et détection avec Keycloak, Kubernetes et Wazuh.
 
 Labo personnel pour comprendre et démontrer la gestion des identités et des accès (IAM) : qui peut se connecter, qui peut accéder à quoi, et comment le vérifier dans les journaux.
 
+## Résultat en bref
+
+- Un Keycloak local (realm `labiam`) avec deux utilisateurs, deux groupes et deux rôles. Les rôles sont portés par les groupes, les utilisateurs les héritent.
+- Une application de test qui authentifie via OpenID Connect, vérifie le jeton (signature, émetteur, expiration) et décide de l'accès d'après le rôle.
+- Un utilisateur connecté sans le bon rôle reçoit une vraie erreur **403**, pas un simple message.
+- Chaque décision (autorisé ou refusé) est écrite dans un journal JSON, prêt pour l'analyse à l'étape suivante.
+- 10 tests automatiques, sans Keycloak, dont le refus des jetons expirés, falsifiés ou émis par un autre realm.
+
+| alice sur Compta : autorisé | alice sur Serveurs : 403 |
+|---|---|
+| ![alice sur Compta](02-autorisation/captures/01-alice-compta-200.png) | ![alice sur Serveurs](02-autorisation/captures/02-alice-serveurs-403.png) |
+
 ## Question centrale
 
 Un utilisateur peut s'authentifier sans être autorisé : se connecter ne donne pas accès aux ressources. Ce labo montre pourquoi et comment le diagnostiquer.
@@ -23,28 +35,79 @@ Chaîne d'accès : utilisateur, groupe, rôle, permission, ressource. Par défau
 
 | Jalon | Contenu | État |
 |---|---|---|
-| 1. Socle | Keycloak local, realm, utilisateurs, groupes, rôles | Terminé |
-| 2. Autorisation | Application de test, deux pages protégées par rôle, erreurs 403, journal des décisions | Terminé |
+| [1. Socle](01-socle/NOTES.md) | Keycloak local, realm, utilisateurs, groupes, rôles | Terminé |
+| [2. Autorisation](02-autorisation/NOTES.md) | Application de test, deux pages protégées par rôle, erreurs 403, journal des décisions | Terminé |
 | 3. Sécurisation | MFA, politique de mot de passe, durée des sessions | À faire |
 | 4. Journaux et détection | Événements envoyés à Wazuh ou Splunk, 2 ou 3 alertes | À faire |
 | 5. Kubernetes (option) | Connexion OIDC avec Keycloak, RBAC au moindre privilège | À faire |
 
+## Technologies
+
+Keycloak 26.8.1, OpenID Connect, Python 3 avec Flask, Authlib et joserfc, Git.
+
 ## Prérequis
 
 - Windows, 16 Go de RAM recommandés
-- OpenJDK (version exigée par la version de Keycloak utilisée)
+- OpenJDK 17 (version exigée par la version de Keycloak utilisée)
 - Keycloak, installé depuis l'archive zip (non versionné dans ce dépôt)
 - Python 3.10 ou plus récent (jalon 2)
 
 ## Reproduire le labo
 
-À compléter à la fin de chaque jalon.
+### Jalon 1 : Keycloak
+
+1. Télécharger Keycloak 26.8.1 (archive zip), l'extraire, puis lancer depuis le dossier qui contient `bin` :
+
+   ```powershell
+   bin\kc.bat start-dev
+   ```
+
+2. Ouvrir `http://localhost:8080`, créer le compte administrateur du realm `master`.
+3. Créer le realm `labiam`. Ne pas travailler dans `master`.
+4. Créer les rôles `finance-user` et `it-user`.
+5. Créer les groupes `finance` et `it`, et assigner à chacun le rôle correspondant.
+6. Créer les utilisateurs `alice` (groupe `finance`) et `bob` (groupe `it`), avec un mot de passe de test.
+
+Le détail et les captures sont dans [01-socle/NOTES.md](01-socle/NOTES.md).
+
+### Jalon 2 : application de test
+
+1. Dans le realm `labiam`, créer le client `test-app` : OpenID Connect, authentification du client activée, flux standard, URI de redirection `http://localhost:5000/callback`, URI de redirection après déconnexion `http://localhost:5000/`.
+2. Copier le secret du client (onglet `Credentials`).
+3. Préparer l'application :
+
+   ```powershell
+   cd 02-autorisation\app
+   py -m venv .venv
+   .venv\Scripts\Activate.ps1
+   pip install -r requirements.txt
+   copy .env.example .env
+   ```
+
+4. Dans `.env`, renseigner `KEYCLOAK_CLIENT_SECRET` (secret du client) et `FLASK_SECRET_KEY` (valeur aléatoire générée avec `python -c "import secrets; print(secrets.token_hex(32))"`).
+5. Lancer les tests, puis l'application :
+
+   ```powershell
+   python -m unittest test_access -v
+   python app.py
+   ```
+
+6. Ouvrir `http://localhost:5000/compta` et `http://localhost:5000/serveurs`, se connecter en alice puis en bob (utiliser « Déconnexion » entre les deux). Les décisions sont écrites dans `02-autorisation/app/access.log`.
+
+Le détail et les captures sont dans [02-autorisation/NOTES.md](02-autorisation/NOTES.md).
 
 ## Sécurité
 
-- Labo local uniquement : Keycloak en mode `start-dev`, jamais exposé sur Internet.
-- Aucun vrai compte, aucun vrai mot de passe, aucun secret dans ce dépôt.
+- Labo local uniquement : Keycloak en mode `start-dev` et application sur le serveur de développement Flask, jamais exposés sur Internet.
+- Aucun vrai compte, aucun vrai mot de passe, aucun secret dans ce dépôt. Le secret du client et la clé de session sont dans un fichier `.env` ignoré par Git (modèle : `.env.example`).
+- Le jeton est vérifié (signature, émetteur, expiration) avant toute décision, et les pages d'erreur n'affichent jamais le jeton.
+- Captures : le nom de l'administrateur est masqué.
 
 ## Limites et suite
 
-À compléter.
+- Une seule application avec deux pages protégées, pas deux applications séparées avec chacune son client Keycloak.
+- HTTP et mode de développement : pas de HTTPS, pas de base de données externe.
+- Les rôles sont lus à la connexion : un changement de rôle dans Keycloak n'est pris en compte qu'à la connexion suivante.
+- Pas encore de MFA ni de politique de mot de passe.
+
+Suite : jalon 3 (sécurisation des comptes), puis jalon 4 (envoi des journaux vers Wazuh ou Splunk et création de 2 ou 3 alertes), puis, si le temps le permet, jalon 5 (Kubernetes avec connexion OIDC et RBAC).
