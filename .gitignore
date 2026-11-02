@@ -22,3 +22,8 @@ Thumbs.db
 
 # Captures brutes (contiennent le nom du compte administrateur) : seules les versions masquées de 01-socle/captures/ sont versionnées
 Capture d*cran*.png
+
+# Python
+.venv/
+__pycache__/
+*.pyc

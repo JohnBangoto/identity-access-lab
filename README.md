@@ -10,9 +10,9 @@ Un utilisateur peut s'authentifier sans être autorisé : se connecter ne donne 
 
 ## Scénario
 
-Deux utilisateurs, deux groupes, deux applications.
+Deux utilisateurs, deux groupes, deux ressources protégées.
 
-| | Application Compta (rôle `finance-user`) | Application Serveurs (rôle `it-user`) |
+| | Page Compta (rôle `finance-user`) | Page Serveurs (rôle `it-user`) |
 |---|---|---|
 | alice (groupe `finance`) | Oui | Non |
 | bob (groupe `it`) | Non | Oui |
@@ -24,7 +24,7 @@ Chaîne d'accès : utilisateur, groupe, rôle, permission, ressource. Par défau
 | Jalon | Contenu | État |
 |---|---|---|
 | 1. Socle | Keycloak local, realm, utilisateurs, groupes, rôles | Terminé |
-| 2. Autorisation | Deux applications de test, matrice des 4 cas, erreurs 403 | À faire |
+| 2. Autorisation | Application de test, deux pages protégées par rôle, erreurs 403, journal des décisions | Terminé |
 | 3. Sécurisation | MFA, politique de mot de passe, durée des sessions | À faire |
 | 4. Journaux et détection | Événements envoyés à Wazuh ou Splunk, 2 ou 3 alertes | À faire |
 | 5. Kubernetes (option) | Connexion OIDC avec Keycloak, RBAC au moindre privilège | À faire |
@@ -34,6 +34,7 @@ Chaîne d'accès : utilisateur, groupe, rôle, permission, ressource. Par défau
 - Windows, 16 Go de RAM recommandés
 - OpenJDK (version exigée par la version de Keycloak utilisée)
 - Keycloak, installé depuis l'archive zip (non versionné dans ce dépôt)
+- Python 3.10 ou plus récent (jalon 2)
 
 ## Reproduire le labo
 
