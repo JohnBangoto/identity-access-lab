@@ -1,0 +1,89 @@
+# Droits Kubernetes du labo : même scénario que l'application.
+#   groupe Keycloak finance -> lecture seule dans le namespace compta
+#   groupe Keycloak it      -> lecture seule dans le namespace serveurs
+# Les noms de groupes portent le préfixe "oidc:" (voir kind-config.yaml).
+# Tout ce qui n'est pas autorisé ici est refusé (aucun droit par défaut).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: compta
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: serveurs
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: lecture-seule
+  namespace: compta
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "services", "configmaps"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: lecture-seule
+  namespace: serveurs
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "services", "configmaps"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: finance-lecture-seule
+  namespace: compta
+subjects:
+  - kind: Group
+    name: "oidc:finance"
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: lecture-seule
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: it-lecture-seule
+  namespace: serveurs
+subjects:
+  - kind: Group
+    name: "oidc:it"
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: lecture-seule
+  apiGroup: rbac.authorization.k8s.io
+---
+# Un pod de démonstration dans chaque namespace, pour avoir quelque chose à lire.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: app-compta
+  namespace: compta
+spec:
+  containers:
+    - name: web
+      image: nginx:alpine
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: app-serveurs
+  namespace: serveurs
+spec:
+  containers:
+    - name: web
+      image: nginx:alpine

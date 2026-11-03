@@ -1,6 +1,6 @@
 # identity-access-lab
 
-Authentification, autorisation et détection avec Keycloak, Kubernetes et Wazuh.
+Authentification, autorisation et détection avec Keycloak, Splunk et Kubernetes.
 
 Labo personnel pour comprendre et démontrer la gestion des identités et des accès (IAM) : qui peut se connecter, qui peut accéder à quoi, et comment le vérifier dans les journaux.
 
@@ -12,6 +12,7 @@ Labo personnel pour comprendre et démontrer la gestion des identités et des ac
 - Chaque décision (autorisé ou refusé) est écrite dans un journal JSON, prêt pour l'analyse à l'étape suivante.
 - Mots de passe contrôlés par une politique, second facteur par code à usage unique (MFA) et sessions limitées dans le temps (jalon 3).
 - Les journaux de l'application et de Keycloak sont lus par Splunk, avec 2 alertes planifiées testées : refus d'accès répétés et échecs de connexion répétés (jalon 4).
+- Un cluster Kubernetes local qui accepte les comptes Keycloak (OIDC) : alice ne lit que le namespace `compta`, bob que `serveurs`, tout le reste est refusé (jalon 5).
 - 10 tests automatiques, sans Keycloak, dont le refus des jetons expirés, falsifiés ou émis par un autre realm.
 
 | alice sur Compta : autorisé | alice sur Serveurs : 403 |
@@ -41,11 +42,11 @@ Chaîne d'accès : utilisateur, groupe, rôle, permission, ressource. Par défau
 | [2. Autorisation](02-autorisation/NOTES.md) | Application de test, deux pages protégées par rôle, erreurs 403, journal des décisions | Terminé |
 | [3. Sécurisation](03-securisation/NOTES.md) | Politique de mot de passe, MFA (code à usage unique), durée des sessions | Terminé |
 | [4. Journaux et détection](04-journaux/NOTES.md) | Journaux de l'application et de Keycloak lus par Splunk, 2 alertes (refus d'accès répétés, échecs de connexion répétés) | Terminé |
-| 5. Kubernetes (option) | Connexion OIDC avec Keycloak, RBAC au moindre privilège | À faire |
+| [5. Kubernetes](05-kubernetes/NOTES.md) | Connexion OIDC avec Keycloak, RBAC au moindre privilège (lecture seule par namespace) | Terminé |
 
 ## Technologies
 
-Keycloak 26.8.1, OpenID Connect, Python 3 avec Flask, Authlib et joserfc, Splunk Enterprise (licence d'essai), Git.
+Keycloak 26.8.1, OpenID Connect, Python 3 avec Flask, Authlib et joserfc, Splunk Enterprise (licence d'essai), Docker Desktop, kind, Kubernetes, kubectl et kubelogin, Git.
 
 ## Prérequis
 
@@ -54,6 +55,7 @@ Keycloak 26.8.1, OpenID Connect, Python 3 avec Flask, Authlib et joserfc, Splunk
 - Keycloak, installé depuis l'archive zip (non versionné dans ce dépôt)
 - Python 3.10 ou plus récent (jalon 2)
 - Splunk Enterprise, licence d'essai de 60 jours (jalon 4)
+- Docker Desktop (WSL2), kind, `kubectl` et kubelogin (jalon 5)
 
 ## Reproduire le labo
 
@@ -133,12 +135,29 @@ Le détail et les captures sont dans [03-securisation/NOTES.md](03-securisation/
 
 Le détail et les captures sont dans [04-journaux/NOTES.md](04-journaux/NOTES.md).
 
+### Jalon 5 : Kubernetes avec Keycloak
+
+1. Installer Docker Desktop, [kind](https://kind.sigs.k8s.io/), `kubectl` et [kubelogin](https://github.com/int128/kubelogin) (copier `kubelogin.exe` sous le nom `kubectl-oidc_login.exe` dans un dossier du `Path`).
+2. Activer le HTTPS dans Keycloak (Kubernetes l'exige) : générer un certificat auto-signé avec `keytool` (noms `host.docker.internal`, `localhost`, `127.0.0.1`), exporter sa partie publique dans `C:\k8s-lab\keycloak-ca.crt`, puis ajouter dans `conf\keycloak.conf` `https-key-store-file`, `https-key-store-password`, `https-port=8444` et `http-host=0.0.0.0`. Vérifier que `https://host.docker.internal:8444/realms/labiam/.well-known/openid-configuration` répond depuis Windows et depuis un conteneur.
+3. Dans le realm `labiam`, créer le client public `kubernetes` (flux standard, URI de redirection `http://localhost:18000` et `http://localhost:18000/*`) avec un mappeur « Group Membership » dont la revendication est `groups` (chemin complet désactivé).
+4. Créer le cluster puis appliquer les droits :
+
+   ```powershell
+   kind create cluster --name labiam --config 05-kubernetes\kind-config.yaml
+   kubectl apply -f 05-kubernetes\rbac.yaml
+   ```
+
+5. Déclarer alice et bob dans `kubeconfig` avec `kubectl config set-credentials` (plugin `oidc-login get-token`, un dossier de cache par utilisateur), puis tester, par exemple `kubectl --context alice get pods -n compta` et `kubectl --context alice auth whoami`.
+
+Le détail, les commandes complètes et les captures sont dans [05-kubernetes/NOTES.md](05-kubernetes/NOTES.md).
+
 ## Sécurité
 
 - Labo local uniquement : Keycloak en mode `start-dev` et application sur le serveur de développement Flask, jamais exposés sur Internet.
 - Aucun vrai compte, aucun vrai mot de passe, aucun secret dans ce dépôt. Le secret du client et la clé de session sont dans un fichier `.env` ignoré par Git (modèle : `.env.example`).
 - Le jeton est vérifié (signature, émetteur, expiration) avant toute décision, et les pages d'erreur n'affichent jamais le jeton.
 - Captures : le nom de l'administrateur et le propriétaire des alertes Splunk sont masqués.
+- Certificat, mot de passe du certificat et jetons Kubernetes restent hors du dépôt (`C:\k8s-lab\`).
 - Les journaux (`C:\splunk-lab\`) restent hors du dépôt.
 
 ## Limites et suite
@@ -147,6 +166,7 @@ Le détail et les captures sont dans [04-journaux/NOTES.md](04-journaux/NOTES.md
 - HTTP et mode de développement : pas de HTTPS, pas de base de données externe.
 - Les rôles sont lus à la connexion : un changement de rôle dans Keycloak n'est pris en compte qu'à la connexion suivante.
 - Le MFA est activé utilisateur par utilisateur, pas imposé à tout le realm, et il n'y a pas de codes de secours.
-- Splunk en licence d'essai de 60 jours : les alertes planifiées s'arrêteront à la fin de l'essai. Les alertes ajoutent une ligne à la liste des alertes déclenchées, sans e-mail. Wazuh n'est pas utilisé.
+- Kubernetes : cluster kind local d'un seul nœud, certificat de Keycloak auto-signé, droits en lecture seule uniquement, groupes lus à la connexion.
+- Splunk en licence d'essai de 60 jours : les alertes planifiées s'arrêteront à la fin de l'essai. Les alertes ajoutent une ligne à la liste des alertes déclenchées, sans e-mail.
 
-Suite, si le temps le permet : jalon 5 (Kubernetes avec connexion OIDC et RBAC).
+Suite possible : droits d'écriture et rôles distincts par équipe dans Kubernetes, HTTPS avec une vraie autorité de certification, MFA imposé à tout le realm.

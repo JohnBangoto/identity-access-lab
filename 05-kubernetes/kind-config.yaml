@@ -1,0 +1,30 @@
+# Cluster kind dont le serveur d'API accepte les jetons OIDC de Keycloak (realm labiam).
+# Prérequis : le certificat public de Keycloak est dans C:/k8s-lab/keycloak-ca.crt
+# Création : kind create cluster --name labiam --config 05-kubernetes/kind-config.yaml
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    extraMounts:
+      - hostPath: C:/k8s-lab/keycloak-ca.crt
+        containerPath: /etc/kubernetes/pki/keycloak-ca.crt
+        readOnly: true
+kubeadmConfigPatches:
+  - |
+    kind: ClusterConfiguration
+    apiServer:
+      extraArgs:
+        - name: oidc-issuer-url
+          value: https://host.docker.internal:8444/realms/labiam
+        - name: oidc-client-id
+          value: kubernetes
+        - name: oidc-username-claim
+          value: preferred_username
+        - name: oidc-username-prefix
+          value: "oidc:"
+        - name: oidc-groups-claim
+          value: groups
+        - name: oidc-groups-prefix
+          value: "oidc:"
+        - name: oidc-ca-file
+          value: /etc/kubernetes/pki/keycloak-ca.crt

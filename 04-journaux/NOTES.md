@@ -137,7 +137,6 @@ Un premier test de l'alerte 2 à 17:13 est parti de la console d'administration 
 - L'alerte 2 compte par nom d'utilisateur, sans filtre sur le realm ni sur l'adresse IP. Elle ne détecte pas les échecs de MFA.
 - Les journaux (`C:\splunk-lab\`), la configuration de Splunk et `conf/keycloak.conf` ne sont pas dans le dépôt. Les étapes pour les recréer sont dans le README.
 - Splunk et Keycloak en HTTP sur la machine locale : labo uniquement.
-- Wazuh n'est pas utilisé : le jalon est fait avec Splunk.
 
 ## Suite
 
