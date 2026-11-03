@@ -11,6 +11,7 @@ Labo personnel pour comprendre et démontrer la gestion des identités et des ac
 - Un utilisateur connecté sans le bon rôle reçoit une vraie erreur **403**, pas un simple message.
 - Chaque décision (autorisé ou refusé) est écrite dans un journal JSON, prêt pour l'analyse à l'étape suivante.
 - Mots de passe contrôlés par une politique, second facteur par code à usage unique (MFA) et sessions limitées dans le temps (jalon 3).
+- Les journaux de l'application et de Keycloak sont lus par Splunk, avec 2 alertes planifiées testées : refus d'accès répétés et échecs de connexion répétés (jalon 4).
 - 10 tests automatiques, sans Keycloak, dont le refus des jetons expirés, falsifiés ou émis par un autre realm.
 
 | alice sur Compta : autorisé | alice sur Serveurs : 403 |
@@ -39,12 +40,12 @@ Chaîne d'accès : utilisateur, groupe, rôle, permission, ressource. Par défau
 | [1. Socle](01-socle/NOTES.md) | Keycloak local, realm, utilisateurs, groupes, rôles | Terminé |
 | [2. Autorisation](02-autorisation/NOTES.md) | Application de test, deux pages protégées par rôle, erreurs 403, journal des décisions | Terminé |
 | [3. Sécurisation](03-securisation/NOTES.md) | Politique de mot de passe, MFA (code à usage unique), durée des sessions | Terminé |
-| 4. Journaux et détection | Événements envoyés à Wazuh ou Splunk, 2 ou 3 alertes | À faire |
+| [4. Journaux et détection](04-journaux/NOTES.md) | Journaux de l'application et de Keycloak lus par Splunk, 2 alertes (refus d'accès répétés, échecs de connexion répétés) | Terminé |
 | 5. Kubernetes (option) | Connexion OIDC avec Keycloak, RBAC au moindre privilège | À faire |
 
 ## Technologies
 
-Keycloak 26.8.1, OpenID Connect, Python 3 avec Flask, Authlib et joserfc, Git.
+Keycloak 26.8.1, OpenID Connect, Python 3 avec Flask, Authlib et joserfc, Splunk Enterprise (licence d'essai), Git.
 
 ## Prérequis
 
@@ -52,6 +53,7 @@ Keycloak 26.8.1, OpenID Connect, Python 3 avec Flask, Authlib et joserfc, Git.
 - OpenJDK 17 (version exigée par la version de Keycloak utilisée)
 - Keycloak, installé depuis l'archive zip (non versionné dans ce dépôt)
 - Python 3.10 ou plus récent (jalon 2)
+- Splunk Enterprise, licence d'essai de 60 jours (jalon 4)
 
 ## Reproduire le labo
 
@@ -107,12 +109,37 @@ Dans le realm `labiam`, sans toucher au code :
 
 Le détail et les captures sont dans [03-securisation/NOTES.md](03-securisation/NOTES.md).
 
+### Jalon 4 : journaux et détection
+
+1. Installer Splunk Enterprise (licence d'essai) et créer un dossier lisible par son compte de service, ici `C:\splunk-lab\`.
+2. Dans `02-autorisation\app\.env`, ajouter `ACCESS_LOG=C:\splunk-lab\access.log`, puis relancer l'application.
+3. Dans `conf\keycloak.conf` de Keycloak, ajouter :
+
+   ```
+   log=console,file
+   log-file=C:/splunk-lab/keycloak.log
+   ```
+
+   puis relancer Keycloak.
+4. Dans Splunk, `Paramètres` → `Ajouter des données` → `Fichiers et répertoires` : surveiller en continu `C:\splunk-lab\access.log` (sourcetype `_json`) et `C:\splunk-lab\keycloak.log` (sourcetype `log4j`), index `main`.
+5. Créer deux alertes planifiées (cron `*/1 * * * *`, intervalle de 5 minutes, déclenchées si le nombre de résultats est supérieur à 0, action « Ajouter aux alertes déclenchées ») :
+
+   ```
+   index=main event=access decision=deny | stats count by user | where count>=3
+   index=main source="C:\\splunk-lab\\keycloak.log" type=LOGIN_ERROR | stats count by username | where count>=3
+   ```
+
+6. Tester : se faire refuser l'accès 3 fois (alice sur `/serveurs`), puis saisir 3 mauvais mots de passe pour alice sur `http://localhost:5000/compta`. Les alertes apparaissent dans `Activité` → `Alertes déclenchées`.
+
+Le détail et les captures sont dans [04-journaux/NOTES.md](04-journaux/NOTES.md).
+
 ## Sécurité
 
 - Labo local uniquement : Keycloak en mode `start-dev` et application sur le serveur de développement Flask, jamais exposés sur Internet.
 - Aucun vrai compte, aucun vrai mot de passe, aucun secret dans ce dépôt. Le secret du client et la clé de session sont dans un fichier `.env` ignoré par Git (modèle : `.env.example`).
 - Le jeton est vérifié (signature, émetteur, expiration) avant toute décision, et les pages d'erreur n'affichent jamais le jeton.
-- Captures : le nom de l'administrateur est masqué.
+- Captures : le nom de l'administrateur et le propriétaire des alertes Splunk sont masqués.
+- Les journaux (`C:\splunk-lab\`) restent hors du dépôt.
 
 ## Limites et suite
 
@@ -120,5 +147,6 @@ Le détail et les captures sont dans [03-securisation/NOTES.md](03-securisation/
 - HTTP et mode de développement : pas de HTTPS, pas de base de données externe.
 - Les rôles sont lus à la connexion : un changement de rôle dans Keycloak n'est pris en compte qu'à la connexion suivante.
 - Le MFA est activé utilisateur par utilisateur, pas imposé à tout le realm, et il n'y a pas de codes de secours.
+- Splunk en licence d'essai de 60 jours : les alertes planifiées s'arrêteront à la fin de l'essai. Les alertes ajoutent une ligne à la liste des alertes déclenchées, sans e-mail. Wazuh n'est pas utilisé.
 
-Suite : jalon 4 (envoi des journaux vers Wazuh ou Splunk et création de 2 ou 3 alertes), puis, si le temps le permet, jalon 5 (Kubernetes avec connexion OIDC et RBAC).
+Suite, si le temps le permet : jalon 5 (Kubernetes avec connexion OIDC et RBAC).
