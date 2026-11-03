@@ -10,6 +10,7 @@ Labo personnel pour comprendre et démontrer la gestion des identités et des ac
 - Une application de test qui authentifie via OpenID Connect, vérifie le jeton (signature, émetteur, expiration) et décide de l'accès d'après le rôle.
 - Un utilisateur connecté sans le bon rôle reçoit une vraie erreur **403**, pas un simple message.
 - Chaque décision (autorisé ou refusé) est écrite dans un journal JSON, prêt pour l'analyse à l'étape suivante.
+- Mots de passe contrôlés par une politique, second facteur par code à usage unique (MFA) et sessions limitées dans le temps (jalon 3).
 - 10 tests automatiques, sans Keycloak, dont le refus des jetons expirés, falsifiés ou émis par un autre realm.
 
 | alice sur Compta : autorisé | alice sur Serveurs : 403 |
@@ -37,7 +38,7 @@ Chaîne d'accès : utilisateur, groupe, rôle, permission, ressource. Par défau
 |---|---|---|
 | [1. Socle](01-socle/NOTES.md) | Keycloak local, realm, utilisateurs, groupes, rôles | Terminé |
 | [2. Autorisation](02-autorisation/NOTES.md) | Application de test, deux pages protégées par rôle, erreurs 403, journal des décisions | Terminé |
-| 3. Sécurisation | MFA, politique de mot de passe, durée des sessions | À faire |
+| [3. Sécurisation](03-securisation/NOTES.md) | Politique de mot de passe, MFA (code à usage unique), durée des sessions | Terminé |
 | 4. Journaux et détection | Événements envoyés à Wazuh ou Splunk, 2 ou 3 alertes | À faire |
 | 5. Kubernetes (option) | Connexion OIDC avec Keycloak, RBAC au moindre privilège | À faire |
 
@@ -96,6 +97,16 @@ Le détail et les captures sont dans [01-socle/NOTES.md](01-socle/NOTES.md).
 
 Le détail et les captures sont dans [02-autorisation/NOTES.md](02-autorisation/NOTES.md).
 
+### Jalon 3 : sécurisation des comptes
+
+Dans le realm `labiam`, sans toucher au code :
+
+1. `Authentication` → `Policies` → `Password policy` : longueur minimale 12, nom d'utilisateur interdit, 1 chiffre, 1 caractère spécial.
+2. `Users` → utilisateur → `Details` : ajouter l'action requise `Configure OTP`. À la connexion suivante, scanner le QR code avec une application d'authentification (ne jamais le capturer ni le versionner).
+3. `Realm settings` → `Sessions` : régler `SSO Session Idle` et `SSO Session Max` (2 minutes et 1 heure dans ce labo).
+
+Le détail et les captures sont dans [03-securisation/NOTES.md](03-securisation/NOTES.md).
+
 ## Sécurité
 
 - Labo local uniquement : Keycloak en mode `start-dev` et application sur le serveur de développement Flask, jamais exposés sur Internet.
@@ -108,6 +119,6 @@ Le détail et les captures sont dans [02-autorisation/NOTES.md](02-autorisation/
 - Une seule application avec deux pages protégées, pas deux applications séparées avec chacune son client Keycloak.
 - HTTP et mode de développement : pas de HTTPS, pas de base de données externe.
 - Les rôles sont lus à la connexion : un changement de rôle dans Keycloak n'est pris en compte qu'à la connexion suivante.
-- Pas encore de MFA ni de politique de mot de passe.
+- Le MFA est activé utilisateur par utilisateur, pas imposé à tout le realm, et il n'y a pas de codes de secours.
 
-Suite : jalon 3 (sécurisation des comptes), puis jalon 4 (envoi des journaux vers Wazuh ou Splunk et création de 2 ou 3 alertes), puis, si le temps le permet, jalon 5 (Kubernetes avec connexion OIDC et RBAC).
+Suite : jalon 4 (envoi des journaux vers Wazuh ou Splunk et création de 2 ou 3 alertes), puis, si le temps le permet, jalon 5 (Kubernetes avec connexion OIDC et RBAC).
